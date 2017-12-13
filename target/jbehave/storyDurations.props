@@ -1,0 +1,6 @@
+#org.jbehave.core.embedder.StoryManager
+#Wed Dec 13 03:15:05 EET 2017
+threads=1
+total=0
+threadAverage=0
+Matrix/BDD/Stories/SaveMatrix.story=0
