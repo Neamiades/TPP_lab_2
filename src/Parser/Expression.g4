@@ -1,35 +1,44 @@
 grammar Expression;
 command:
-        MtxVar '=' substractExpr
-	|   NumVar '=' var
-	|   var
-    |   substractExpr;
+      MtxVar '=' addExpr
+    | NumVar '=' var
+    | var
+    | addExpr;
 
-substractExpr:
-        mtxExpr ('-' mtxExpr)*;
+addExpr:
+      mtxExpr ('+' mtxExpr)*;
 
 mtxExpr:
-	atomExpr ('^' MtxOperator)*;
+      atomExpr ('*' atomExpr)*
+    | atomExpr ('*' var)*
+    | (var '*')+ atomExpr;
 
 atomExpr:
-	|   mtx
-	|   var '*' mtxExpr
-    |   '(' substractExpr ')';
+      mtx
+    | (mtx | '(' addExpr ')') (Inversion)*
+    | '(' addExpr ')';
 
 mtx:
-	    MtxVar
-	|   '[' vctr (',' vctr)* ']';
+      MtxVar
+      | '[' vctr (',' vctr)* ']';
 
-vctr:   '[' var (',' var)*']';
+vctr:
+      '[' var (',' var)*']';
 
-var: NumVar | Number;
+var:
+      NumVar | Number;
 
-MtxOperator : 'T' | '-1';
+Inversion:
+      '^' '-1';
 
-Number: ('-')? ('0' ..'9')+ ('.' ('0' ..'9')+)?;
+Number:
+      ('-')? ('0' ..'9')+ ('.' ('0' ..'9')+)?;
 
-MtxVar: [A-SU-Z];
+MtxVar:
+      [A-Z];
 
-NumVar: [a-z];
+NumVar:
+      [a-z];
 
-WS: [ \t\r\n]+ -> skip;
+WS:
+      [ \t\r\n]+ -> skip;

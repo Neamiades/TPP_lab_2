@@ -4,8 +4,10 @@ import static org.junit.Assert.assertTrue;
 
 import Matrix.MakeMatrixExpression;
 import Matrix.Matrix;
+import Matrix.CommandType;
 import Parser.ExpressionLexer;
 import Parser.ExpressionParser;
+import com.sun.media.sound.InvalidDataException;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
@@ -68,9 +70,9 @@ public class SaveMatrixSteps extends Steps
 
                 output += exList.get(exList.size() - 1).getMessage();
             }
-            else if (exprMaker.MtxCommand)
-                output = Matrix.ToString(exprMaker.getMtxExpression());
-            else
+            else if(exprMaker.getCommand() == CommandType.Matrix)
+                output = exprMaker.getMtxExpression().toString();
+            else if (exprMaker.getCommand() == CommandType.Number)
                 output = exprMaker.getMtxExpression().toString();
         }
         else

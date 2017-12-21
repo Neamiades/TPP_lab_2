@@ -8,57 +8,56 @@ import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.security.InvalidParameterException;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
-/**
- * Created by Neami on 08.12.2017.
- */
 public class MakeMatrixExpression implements ExpressionListener {
     private Map<String, Matrix> matrix = new HashMap<String, Matrix>();
 
-    private Map<String, Double> variables = new HashMap<String, Double>();
+    private Map<String, Double> variables = new HashMap<>();
+
 
     private Stack<Matrix> mtxStack = new Stack<Matrix>();
 
-    private Stack<Double> varStack = new Stack<Double>();
+    private Stack<Double> varStack = new Stack<>();
 
-    private Stack<Exception> exceptionsStack = new Stack<Exception>();
+    private Stack<Exception> exceptionsStack = new Stack<>();
+
 
     private boolean _commandExecutionFailed;
 
-    public boolean MtxCommand;
+    private CommandType Command;
+
+    public CommandType getCommand() {
+        return Command;
+    }
 
     public boolean isCommandExecutionFailed() {
         return _commandExecutionFailed;
     }
 
     public ArrayList<Exception> getExceptionsList() {
-        ArrayList<Exception> result = new ArrayList<Exception>(exceptionsStack);
+        ArrayList<Exception> result = new ArrayList<>(exceptionsStack);
         return result;
     }
 
     public Matrix getMtxExpression() {
         if (mtxStack.empty() || mtxStack.contains(null))
-        {
-            exceptionsStack.push(new InvalidParameterException("Matrix isn't in memory or variable is incorrect"));
-            _commandExecutionFailed = true;
-        }
+            throw new InvalidParameterException("Matrix isn't in memory or variable is incorrect");
 
         return mtxStack.pop();
     }
 
     public double getVarExpression() {
         if (varStack.empty() || varStack.contains(null))
-        {
-            exceptionsStack.push(new InvalidParameterException("variable isn't in memory or variable is incorrect"));
-            _commandExecutionFailed = true;
-        }
+            throw new InvalidParameterException("Variable isn't in memory or variable is incorrect");
 
         return varStack.pop();
     }
+
 
     @Override public void enterCommand(ExpressionParser.CommandContext ctx)
     {
@@ -70,55 +69,53 @@ public class MakeMatrixExpression implements ExpressionListener {
 
     @Override public void exitCommand(ExpressionParser.CommandContext ctx)
     {
-        if (ctx.MtxVar() != null)
-        {
-            String mtxVar = ctx.MtxVar().getText();
+        if (_commandExecutionFailed)
+            return;
 
-            if (matrix.containsKey(mtxVar))
-                matrix.replace(mtxVar, mtxStack.peek());
-            else
-                matrix.put(mtxVar, mtxStack.peek());
+        if (ctx.addExpr() != null)
+        {
+            Command = CommandType.Matrix;
+
+            if (ctx.MtxVar() != null)
+                matrix.put(ctx.MtxVar().getText(), mtxStack.peek());
+
         }
         else if (ctx.var() != null)
         {
-            double number = ctx.var().NumVar() == null
-                    ? Double.valueOf(ctx.var().Number().getText())
-                    : variables.get(ctx.var().NumVar().getText());
+            Command = CommandType.Number;
+
+            if (ctx.var().NumVar() != null)
+            {
+                String varName = ctx.var().NumVar().getText();
+                if(variables.containsKey(varName))
+                    varStack.push(variables.get(varName));
+                else
+                {
+                    exceptionsStack.push(new InvalidParameterException("'" + varName + "' " +
+                                                                       "variable isn't in repo"));
+                    _commandExecutionFailed = true;
+                }
+            }
+            else
+                varStack.push(Double.valueOf(ctx.var().Number().getText()));
 
             if (ctx.NumVar() != null)
-            {
-                String var = ctx.NumVar().getText();
-
-                if (variables.containsKey(var))
-                {
-                    variables.replace(var, number);
-                }
-                else
-                    variables.put(var, number);
-            }
-            varStack.push(number);
-
-            MtxCommand = false;
-            return;
+                variables.put(ctx.NumVar().getText(), varStack.peek());
         }
-        MtxCommand = true;
     }
 
-    @Override public void enterSubstractExpr(ExpressionParser.SubstractExprContext ctx) { }
+    @Override
+    public void exitAddExpr(ExpressionParser.AddExprContext ctx)
+    {
+        if (_commandExecutionFailed)
+            return;
 
-    @Override public void exitSubstractExpr(ExpressionParser.SubstractExprContext ctx) {
+        int additionsCount = ctx.mtxExpr().size();
 
-        Stack<Matrix> substrctMtx = new Stack<Matrix>();
-        int substractionsCount = ctx.mtxExpr().size();
-
-        for (int i = 0; i < substractionsCount && mtxStack.size() > 0; ++i)
-            substrctMtx.push(mtxStack.pop());
-        Matrix sum = null;
-        if (substrctMtx.size() > 0)
-            sum = substrctMtx.pop();
-        for (int i = 1; i < substractionsCount && substrctMtx.size() > 0; ++i) {
+        Matrix sum = mtxStack.pop();
+        for (int i = 1; i < additionsCount && mtxStack.size() > 0; ++i) {
             try {
-                sum = Matrix.OpSubtraction(sum, substrctMtx.pop());
+                sum = Matrix.OpAddition(sum, mtxStack.pop());
             } catch (InvalidDataException e) {
                 exceptionsStack.push(e);
                 _commandExecutionFailed = true;
@@ -127,47 +124,80 @@ public class MakeMatrixExpression implements ExpressionListener {
         mtxStack.push(sum);
     }
 
-    @Override public void enterMtxExpr(ExpressionParser.MtxExprContext ctx) { }
-
-    @Override public void exitMtxExpr(ExpressionParser.MtxExprContext ctx) {
-        if (ctx.MtxOperator() == null || ctx.MtxOperator(0) == null)
+    @Override
+    public void exitMtxExpr(ExpressionParser.MtxExprContext ctx)
+    {
+        if (_commandExecutionFailed)
             return;
-        String op = ctx.MtxOperator(0).getText();
 
-        if (op.equals("T"))
+        int atomCount = ctx.atomExpr().size();
+
+        if (ctx.var() != null && ctx.var().size() != 0)
         {
-            mtxStack.push(mtxStack.pop().GetTransponent());
+            int varCount = ctx.var().size();
+            double mul = 1;
+
+            for (int i = 0; i < varCount; i++)
+            {
+                if (ctx.var(i).NumVar() != null)
+                {
+                    String varName = ctx.var(i).NumVar().getText();
+                    if(variables.containsKey(varName))
+                        mul *= variables.get(varName);
+                    else
+                    {
+                        exceptionsStack.push(new InvalidParameterException("'" + varName + "' " +
+                                                                           "variable isn't in repo"));
+                        _commandExecutionFailed = true;
+                    }
+                }
+                else
+                    mul *= Double.valueOf(ctx.var(i).Number().getText());
+            }
+
+            mtxStack.push(Matrix.OpMultiply(mul, mtxStack.pop()));
         }
-        else
+        else if(atomCount > 1)
         {
-            Matrix tempMtx = mtxStack.pop();
+            Matrix product = mtxStack.pop();
+            for (int i = 1; i < atomCount; i++) {
+                try {
+                    product = Matrix.OpMultiply(product, mtxStack.pop());
+                } catch (InvalidDataException e) {
+
+                    exceptionsStack.push(new InvalidParameterException(e.getMessage()));
+                    _commandExecutionFailed = true;
+                }
+            }
+
+            mtxStack.push(product);
+        }
+    }
+
+    @Override
+    public void exitAtomExpr(ExpressionParser.AtomExprContext ctx)
+    {
+        if (_commandExecutionFailed)
+            return;
+
+        if (ctx.Inversion() != null && ctx.Inversion().size() % 2 != 0)
+        {
             try {
-                mtxStack.push(tempMtx.GetReverse());
+                mtxStack.push(mtxStack.pop().GetReverse());
             } catch (InvalidDataException e) {
-                mtxStack.push(tempMtx);
-                exceptionsStack.push(e);
+
+                exceptionsStack.push(new InvalidParameterException(e.getMessage()));
                 _commandExecutionFailed = true;
             }
         }
     }
 
-    @Override public void enterAtomExpr(ExpressionParser.AtomExprContext ctx) { }
-
-    @Override public void exitAtomExpr(ExpressionParser.AtomExprContext ctx)
+    @Override
+    public void exitMtx(ExpressionParser.MtxContext ctx)
     {
-        if (ctx.mtxExpr() != null)
-        {
-            if (ctx.var().NumVar() == null)
-                mtxStack.push(Matrix.OpMultiply(Double.valueOf(ctx.var().Number().getText()), mtxStack.pop()));
-            else
-                mtxStack.push(Matrix.OpMultiply(variables.get(ctx.var().NumVar().getText()), mtxStack.pop()));
-        }
-    }
+        if (_commandExecutionFailed)
+            return;
 
-    @Override public void enterMtx(ExpressionParser.MtxContext ctx) { }
-
-    @Override public void exitMtx(ExpressionParser.MtxContext ctx)
-    {
         Matrix newMatrix;
         if (ctx.MtxVar() == null)
         {
@@ -177,11 +207,14 @@ public class MakeMatrixExpression implements ExpressionListener {
             {
                 exceptionsStack.push(new InvalidParameterException("We cant set matrix with empty row"));
                 _commandExecutionFailed = true;
+                return;
             }
 
             double[][] mtx = new double[ctx.vctr().size()][vecSize];
 
-            int i = 0, j = 0;
+            int i = 0;
+            int j;
+
             for (ExpressionParser.VctrContext item : ctx.vctr()) {
 
                 if (item.var().size() != vecSize)
@@ -193,7 +226,17 @@ public class MakeMatrixExpression implements ExpressionListener {
                 j = 0;
                 for (ExpressionParser.VarContext var : item.var()) {
                     if (var.NumVar() != null)
-                        mtx[i][j] = variables.get(var.NumVar().getText());
+                    {
+                        if (variables.containsKey(var.NumVar().getText()))
+                            mtx[i][j] = variables.get(var.NumVar().getText());
+                        else
+                        {
+                            exceptionsStack.push(new InvalidParameterException("'" + var.NumVar().getText() + "' " +
+                                                                               "variable isn't in repo"));
+                            _commandExecutionFailed = true;
+                            return;
+                        }
+                    }
                     else if (var.Number() != null)
                         mtx[i][j] = Double.valueOf(var.Number().getText());
                     else
@@ -212,8 +255,10 @@ public class MakeMatrixExpression implements ExpressionListener {
         {
             if (matrix.get(ctx.MtxVar().getText()) == null)
             {
-                exceptionsStack.push(new InvalidParameterException("An expression refers to a matrix that is not in the repository or " +
-                        "matrix name has invalid syntax"));
+                exceptionsStack.push(new InvalidParameterException("'" + ctx.MtxVar().getText() + "'" +
+                                                                   " matrix that " +
+                                                                   "is not in the repository or " +
+                                                                   "matrix name has invalid syntax"));
                 _commandExecutionFailed = true;
                 return;
             }
@@ -223,20 +268,43 @@ public class MakeMatrixExpression implements ExpressionListener {
         mtxStack.push(newMatrix);
     }
 
-    @Override public void enterVctr(ExpressionParser.VctrContext ctx) { }
 
-    @Override public void exitVctr(ExpressionParser.VctrContext ctx) { }
+    @Override
+    public void exitVctr(ExpressionParser.VctrContext ctx) { }
 
-    @Override public void enterVar(ExpressionParser.VarContext ctx) { }
+    @Override
+    public void exitVar(ExpressionParser.VarContext ctx) { }
 
-    @Override public void exitVar(ExpressionParser.VarContext ctx) { }
+
+    @Override
+    public void enterAddExpr(ExpressionParser.AddExprContext ctx) { }
+
+    @Override
+    public void enterMtxExpr(ExpressionParser.MtxExprContext ctx) { }
+
+    @Override
+    public void enterAtomExpr(ExpressionParser.AtomExprContext ctx) { }
+
+    @Override
+    public void enterMtx(ExpressionParser.MtxContext ctx) { }
+
+    @Override
+    public void enterVctr(ExpressionParser.VctrContext ctx) { }
+
+    @Override
+    public void enterVar(ExpressionParser.VarContext ctx) { }
 
 
-    @Override public void enterEveryRule(ParserRuleContext ctx) { }
+    @Override
+    public void visitTerminal(TerminalNode terminalNode) { }
 
-    @Override public void exitEveryRule(ParserRuleContext ctx) { }
+    @Override
+    public void visitErrorNode(ErrorNode errorNode) { }
 
-    @Override public void visitTerminal(TerminalNode node) { }
 
-    @Override public void visitErrorNode(ErrorNode node) { }
+    @Override
+    public void enterEveryRule(ParserRuleContext parserRuleContext) { }
+
+    @Override
+    public void exitEveryRule(ParserRuleContext parserRuleContext) { }
 }

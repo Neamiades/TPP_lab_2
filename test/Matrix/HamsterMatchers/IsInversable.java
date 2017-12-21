@@ -7,9 +7,6 @@ import org.hamcrest.Factory;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 
-/**
- * Created by Neami on 07.12.2017.
- */
 public class IsInversable extends TypeSafeMatcher<Matrix> {
 
     public void describeTo(Description description) { description.appendText("True if matrix have inverse matrix"); }

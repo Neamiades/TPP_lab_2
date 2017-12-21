@@ -6,9 +6,6 @@ import org.hamcrest.Factory;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 
-/**
- * Created by Neami on 07.12.2017.
- */
 public class HaveEqualsSize extends TypeSafeMatcher<Matrix> {
     private final Matrix mtx;
 
